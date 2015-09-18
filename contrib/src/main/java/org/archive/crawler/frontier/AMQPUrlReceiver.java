@@ -125,21 +125,13 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
         this.autoDelete = autoDelete;
     }
 
-    /**
-     * Should we attempt to pause the queues when pausing the crawl (not
-     * supported by RabbitMQ > 3.3)
-     */
-    private boolean pauseQueues = false;
-    public boolean isPauseQueues() {
-        return pauseQueues;
-    }
-    public void setPauseQueues(boolean pauseQueues) {
-        this.pauseQueues = pauseQueues;
-    }
-
     private transient Lock lock = new ReentrantLock(true);
 
+    private boolean pauseConsumer = true;
+
     private class StarterRestarter extends Thread {
+        private String consumerTag;
+
         public StarterRestarter(String name) {
             super(name);
         }
@@ -150,7 +142,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                 try {
                     lock.lockInterruptibly();
                     try {
-                        if (!isRunning) {
+                        if (!isRunning && !pauseConsumer) {
                             // start up again
                             try {
                                 Consumer consumer = new UrlConsumer(channel());
@@ -158,11 +150,19 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                                 channel().queueDeclare(getQueueName(), durable,
                                         false, autoDelete, null);
                                 channel().queueBind(getQueueName(), getExchange(), getQueueName());
-                                channel().basicConsume(getQueueName(), false, consumer);
+                                consumerTag = channel().basicConsume(getQueueName(), false, consumer);
                                 isRunning = true;
                                 logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName());
                             } catch (IOException e) {
                                 logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 30 seconds)", e);
+                            }
+                        }
+
+                        if (isRunning && pauseConsumer) {
+                            try {
+                                channel().basicCancel(consumerTag);
+                            } catch (IOException e) {
+                                logger.log(Level.SEVERE, "problem cancelling AMQP consumer (will try again after 30 seconds)", e);
                             }
                         }
 
@@ -171,6 +171,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                         lock.unlock();
                     }
                 } catch (InterruptedException e) {
+
                     return;
                 }
             }
@@ -178,7 +179,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     }
 
     transient private StarterRestarter starterRestarter;
-    
+
     @Override
     public void start() {
         lock.lock();
@@ -397,22 +398,13 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     public void onApplicationEvent(CrawlStateEvent event) {
         switch(event.getState()) {
         case PAUSING: case PAUSED:
-            if (pauseQueues && channel != null && channel.isOpen()) {
-                try {
-                    channel.flow(false);
-                } catch (IOException e) {
-                    logger.log(Level.WARNING, "failed to pause flow on amqp channel", e);
-                }
-            }
+            this.pauseConsumer = true;
             break;
 
         case RUNNING: case EMPTY: case PREPARING:
-            if (pauseQueues && channel != null && channel.isOpen()) {
-                try {
-                    channel.flow(true);
-                } catch (IOException e) {
-                    logger.log(Level.SEVERE, "failed to resume flow on amqp channel", e);
-                }
+            this.pauseConsumer = false;
+            if (starterRestarter == null || !starterRestarter.isAlive()) {
+                start();
             }
             break;
 
