@@ -25,6 +25,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -104,7 +106,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     public boolean isRunning() {
         return isRunning;
     }
-
+    
     /** Should be queues be marked as durable? */
     private boolean durable = true;
     public boolean isDurable() {
@@ -135,6 +137,8 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
         this.pauseQueues = pauseQueues;
     }
 
+    private transient Lock lock = new ReentrantLock(true);
+
     private class StarterRestarter extends Thread {
         public StarterRestarter(String name) {
             super(name);
@@ -143,24 +147,29 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
         @Override
         public void run() {
             while (!Thread.interrupted()) {
-                if (!isRunning) {
-                    synchronized (AMQPUrlReceiver.this) {
-                        try {
-                            Consumer consumer = new UrlConsumer(channel());
-                            channel().queueDeclare(getQueueName(), durable,
-                                    false, autoDelete, null);
-                            channel().queueBind(getQueueName(), getExchange(), getQueueName());
-                            channel().basicConsume(getQueueName(), false, consumer);
-                            isRunning = true;
-                            logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName());
-                        } catch (IOException e) {
-                            logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 30 seconds)", e);
-                        }
-                    }
-                }
-
                 try {
-                    Thread.sleep(30000);
+                    lock.lockInterruptibly();
+                    try {
+                        if (!isRunning) {
+                            // start up again
+                            try {
+                                Consumer consumer = new UrlConsumer(channel());
+                                channel().exchangeDeclare(getExchange(), "direct", true);
+                                channel().queueDeclare(getQueueName(), durable,
+                                        false, autoDelete, null);
+                                channel().queueBind(getQueueName(), getExchange(), getQueueName());
+                                channel().basicConsume(getQueueName(), false, consumer);
+                                isRunning = true;
+                                logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName());
+                            } catch (IOException e) {
+                                logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 30 seconds)", e);
+                            }
+                        }
+
+                        Thread.sleep(30000);
+                    } finally {
+                        lock.unlock();
+                    }
                 } catch (InterruptedException e) {
                     return;
                 }
@@ -171,70 +180,90 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     transient private StarterRestarter starterRestarter;
     
     @Override
-    synchronized public void start() {
-        // spawn off a thread to start up the amqp consumer, and try to restart it if it dies 
-        if (!isRunning) {
-            starterRestarter = new StarterRestarter(AMQPUrlReceiver.class.getSimpleName() + "-starter-restarter");
-            starterRestarter.start();
+    public void start() {
+        lock.lock();
+        try {
+            // spawn off a thread to start up the amqp consumer, and try to restart it if it dies 
+            if (!isRunning) {
+                starterRestarter = new StarterRestarter(AMQPUrlReceiver.class.getSimpleName() + "-starter-restarter");
+                starterRestarter.start();
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
     @Override
-    synchronized public void stop() {
-        logger.info("shutting down");
-        if (connection != null && connection.isOpen()) {
-            try {
-                connection.close();
-            } catch (IOException e) {
-                logger.log(Level.SEVERE, "problem closing AMQP connection", e);
+    public void stop() {
+        lock.lock();
+        try {
+            logger.info("shutting down");
+            if (connection != null && connection.isOpen()) {
+                try {
+                    connection.close();
+                } catch (IOException e) {
+                    logger.log(Level.SEVERE, "problem closing AMQP connection", e);
+                }
             }
-        }
-        if (starterRestarter != null && starterRestarter.isAlive()) {
-            starterRestarter.interrupt();
-            try {
-                starterRestarter.join();
-            } catch (InterruptedException e) {
+            if (starterRestarter != null && starterRestarter.isAlive()) {
+                starterRestarter.interrupt();
+                try {
+                    starterRestarter.join();
+                } catch (InterruptedException e) {
+                }
             }
+            starterRestarter = null;
+            connection = null;
+            channel = null;
+            isRunning = false;
+        } finally {
+            lock.unlock();
         }
-        starterRestarter = null;
-        connection = null;
-        channel = null;
-        isRunning = false;
     }
 
     transient protected Connection connection = null;
     transient protected Channel channel = null;
 
-    synchronized protected Connection connection() throws IOException {
-        if (connection != null && !connection.isOpen()) {
-            logger.warning("connection is closed, creating a new one");
-            connection = null;
-        }
-
-        if (connection == null) {
-            ConnectionFactory factory = new ConnectionFactory();
-            try {
-                factory.setUri(getAmqpUri());
-            } catch (Exception e) {
-                throw new IOException("problem with AMQP uri " + getAmqpUri(), e);
+    protected Connection connection() throws IOException {
+        lock.lock();
+        try {
+            if (connection != null && !connection.isOpen()) {
+                logger.warning("connection is closed, creating a new one");
+                connection = null;
             }
-            connection = factory.newConnection();
-        }
 
-        return connection;
+            if (connection == null) {
+                ConnectionFactory factory = new ConnectionFactory();
+                try {
+                    factory.setUri(getAmqpUri());
+                } catch (Exception e) {
+                    throw new IOException("problem with AMQP uri " + getAmqpUri(), e);
+                }
+                connection = factory.newConnection();
+            }
+
+            return connection;
+        } finally {
+            lock.unlock();
+        }
     }
 
-    synchronized protected Channel channel() throws IOException {
-        if (channel != null && !channel.isOpen()) {
-            logger.warning("channel is not open, creating a new one");
-            channel = null;
-        }
+    protected Channel channel() throws IOException {
+        lock.lock();
+        try {
+            if (channel != null && !channel.isOpen()) {
+                logger.warning("channel is not open, creating a new one");
+                channel = null;
+            }
 
-        if (channel == null) {
-            channel = connection().createChannel();
-        }
+            if (channel == null) {
+                channel = connection().createChannel();
+            }
 
-        return channel;
+            return channel;
+        } finally {
+            lock.unlock();
+        }
     }
 
     // XXX should we be using QueueingConsumer because of possible blocking in
@@ -356,7 +385,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             curi.setSchedulingDirective(SchedulingConstants.HIGH);
             curi.setPrecedence(1);
             
-            curi.setForceFetch(true);
+            //curi.setForceFetch(true);
 
             curi.getAnnotations().add(A_RECEIVED_FROM_AMQP);
 
@@ -368,7 +397,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     public void onApplicationEvent(CrawlStateEvent event) {
         switch(event.getState()) {
         case PAUSING: case PAUSED:
-            if (channel != null && channel.isOpen() && pauseQueues) {
+            if (pauseQueues && channel != null && channel.isOpen()) {
                 try {
                     channel.flow(false);
                 } catch (IOException e) {
@@ -378,7 +407,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             break;
 
         case RUNNING: case EMPTY: case PREPARING:
-            if (channel != null && channel.isOpen() && pauseQueues) {
+            if (pauseQueues && channel != null && channel.isOpen()) {
                 try {
                     channel.flow(true);
                 } catch (IOException e) {
