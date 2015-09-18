@@ -130,7 +130,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     private boolean pauseConsumer = true;
 
     private class StarterRestarter extends Thread {
-        private String consumerTag;
+        private String consumerTag = null;
 
         public StarterRestarter(String name) {
             super(name);
@@ -160,8 +160,11 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
 
                         if (isRunning && pauseConsumer) {
                             try {
-                                logger.info("Attempting to cancel URLConsumer with consumerTag=" + consumerTag);
-                                channel().basicCancel(consumerTag);
+                                if (consumerTag != null) {
+                                    logger.info("Attempting to cancel URLConsumer with consumerTag=" + consumerTag);
+                                    channel().basicCancel(consumerTag);
+                                    consumerTag = null;
+                                }
                             } catch (IOException e) {
                                 logger.log(Level.SEVERE, "problem cancelling AMQP consumer (will try again after 30 seconds)", e);
                             }
