@@ -154,7 +154,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                                 isRunning = true;
                                 logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName() + " consumerTag=" + consumerTag);
                             } catch (IOException e) {
-                                logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 30 seconds)", e);
+                                logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 10 seconds)", e);
                             }
                         }
 
@@ -164,13 +164,14 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                                     logger.info("Attempting to cancel URLConsumer with consumerTag=" + consumerTag);
                                     channel().basicCancel(consumerTag);
                                     consumerTag = null;
+                                    logger.info("Cancelled URLConsumer.");
                                 }
                             } catch (IOException e) {
-                                logger.log(Level.SEVERE, "problem cancelling AMQP consumer (will try again after 30 seconds)", e);
+                                logger.log(Level.SEVERE, "problem cancelling AMQP consumer (will try again after 10 seconds)", e);
                             }
                         }
 
-                        Thread.sleep(30000);
+                        Thread.sleep(10 * 000);
                     } finally {
                         lock.unlock();
                     }
@@ -406,7 +407,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             this.pauseConsumer = true;
             break;
 
-        case RUNNING: case EMPTY: case PREPARING:
+        case RUNNING:
             logger.info("Requesting restart of the URLConsumer...");
             this.pauseConsumer = false;
             if (starterRestarter == null || !starterRestarter.isAlive()) {
