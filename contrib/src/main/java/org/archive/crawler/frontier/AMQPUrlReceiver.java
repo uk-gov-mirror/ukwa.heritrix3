@@ -105,6 +105,36 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
         return isRunning;
     }
 
+    /** Should be queues be marked as durable? */
+    private boolean durable = true;
+    public boolean isDurable() {
+        return durable;
+    }
+    public void setDurable(boolean durable) {
+        this.durable = durable;
+    }
+
+    /** Should be queues be marked as auto-delete? */
+    private boolean autoDelete = false;
+    public boolean isAutoDelete() {
+        return autoDelete;
+    }
+    public void setAutoDelete(boolean autoDelete) {
+        this.autoDelete = autoDelete;
+    }
+
+    /**
+     * Should we attempt to pause the queues when pausing the crawl (not
+     * supported by RabbitMQ > 3.3)
+     */
+    private boolean pauseQueues = false;
+    public boolean isPauseQueues() {
+        return pauseQueues;
+    }
+    public void setPauseQueues(boolean pauseQueues) {
+        this.pauseQueues = pauseQueues;
+    }
+
     private class StarterRestarter extends Thread {
         public StarterRestarter(String name) {
             super(name);
@@ -117,7 +147,8 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                     synchronized (AMQPUrlReceiver.this) {
                         try {
                             Consumer consumer = new UrlConsumer(channel());
-                            channel().queueDeclare(getQueueName(), false, false, true, null);
+                            channel().queueDeclare(getQueueName(), durable,
+                                    false, autoDelete, null);
                             channel().queueBind(getQueueName(), getExchange(), getQueueName());
                             channel().basicConsume(getQueueName(), false, consumer);
                             isRunning = true;
@@ -245,9 +276,14 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                     logger.log(Level.SEVERE,
                             "problem creating CrawlURI from json received via AMQP "
                                     + decodedBody, e);
+                } catch (Throwable e) {
+                    logger.log(Level.SEVERE,
+                            "Unanticipated problem creating CrawlURI from json received via AMQP "
+                                    + decodedBody, e);
                 }
             } else {
-                logger.warning("ignoring url with method other than GET - " + decodedBody);
+                logger.info("ignoring url with method other than GET - "
+                        + decodedBody);
             }
 
             this.getChannel().basicAck(envelope.getDeliveryTag(), false);
@@ -332,7 +368,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     public void onApplicationEvent(CrawlStateEvent event) {
         switch(event.getState()) {
         case PAUSING: case PAUSED:
-            if (channel != null && channel.isOpen()) {
+            if (channel != null && channel.isOpen() && pauseQueues) {
                 try {
                     channel.flow(false);
                 } catch (IOException e) {
@@ -342,7 +378,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             break;
 
         case RUNNING: case EMPTY: case PREPARING:
-            if (channel != null && channel.isOpen()) {
+            if (channel != null && channel.isOpen() && pauseQueues) {
                 try {
                     channel.flow(true);
                 } catch (IOException e) {
