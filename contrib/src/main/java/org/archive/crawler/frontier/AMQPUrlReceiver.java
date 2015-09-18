@@ -175,7 +175,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                             }
                         }
 
-                        Thread.sleep(10 * 000);
+                        Thread.sleep(10 * 1000);
                     } finally {
                         lock.unlock();
                     }
