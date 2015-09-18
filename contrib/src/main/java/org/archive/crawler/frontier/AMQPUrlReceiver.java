@@ -108,7 +108,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     }
     
     /** Should be queues be marked as durable? */
-    private boolean durable = true;
+    private boolean durable = false;
     public boolean isDurable() {
         return durable;
     }
@@ -117,7 +117,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     }
 
     /** Should be queues be marked as auto-delete? */
-    private boolean autoDelete = false;
+    private boolean autoDelete = true;
     public boolean isAutoDelete() {
         return autoDelete;
     }
@@ -152,7 +152,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
                                 channel().queueBind(getQueueName(), getExchange(), getQueueName());
                                 consumerTag = channel().basicConsume(getQueueName(), false, consumer);
                                 isRunning = true;
-                                logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName());
+                                logger.info("started AMQP consumer uri=" + getAmqpUri() + " exchange=" + getExchange() + " queueName=" + getQueueName() + " consumerTag=" + consumerTag);
                             } catch (IOException e) {
                                 logger.log(Level.SEVERE, "problem starting AMQP consumer (will try again after 30 seconds)", e);
                             }
@@ -160,6 +160,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
 
                         if (isRunning && pauseConsumer) {
                             try {
+                                logger.info("Attempting to cancel URLConsumer with consumerTag=" + consumerTag);
                                 channel().basicCancel(consumerTag);
                             } catch (IOException e) {
                                 logger.log(Level.SEVERE, "problem cancelling AMQP consumer (will try again after 30 seconds)", e);
@@ -398,10 +399,12 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
     public void onApplicationEvent(CrawlStateEvent event) {
         switch(event.getState()) {
         case PAUSING: case PAUSED:
+            logger.info("Requesting a pause of the URLConsumer...");
             this.pauseConsumer = true;
             break;
 
         case RUNNING: case EMPTY: case PREPARING:
+            logger.info("Requesting restart of the URLConsumer...");
             this.pauseConsumer = false;
             if (starterRestarter == null || !starterRestarter.isAlive()) {
                 start();
