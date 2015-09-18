@@ -143,7 +143,7 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             while (!Thread.interrupted()) {
                 try {
                     lock.lockInterruptibly();
-                    logger.info("Checking isConsuming=" + isConsuming + " and pauseConsumer=" + pauseConsumer);
+                    logger.finest("Checking isConsuming=" + isConsuming + " and pauseConsumer=" + pauseConsumer);
                     try {
                         if (!isConsuming && !pauseConsumer) {
                             // start up again
@@ -395,7 +395,15 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             curi.setSchedulingDirective(SchedulingConstants.HIGH);
             curi.setPrecedence(1);
             
-            //curi.setForceFetch(true);
+            // optional forceFetch instruction:
+            if (jo.has("forceFetch")) {
+                curi.setForceFetch(jo.getBoolean("forceFetch"));
+            }
+
+            // optional isSeed instruction:
+            if (jo.has("isSeed")) {
+                curi.setSeed(jo.getBoolean("isSeed"));
+            }
 
             curi.getAnnotations().add(A_RECEIVED_FROM_AMQP);
 
