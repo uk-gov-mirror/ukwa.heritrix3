@@ -397,12 +397,16 @@ public class AMQPUrlReceiver implements Lifecycle, ApplicationListener<CrawlStat
             
             // optional forceFetch instruction:
             if (jo.has("forceFetch")) {
-                curi.setForceFetch(jo.getBoolean("forceFetch"));
+                boolean forceFetch = jo.getBoolean("forceFetch");
+                logger.info("Setting forceFetch=" + forceFetch);
+                curi.setForceFetch(forceFetch);
             }
 
             // optional isSeed instruction:
             if (jo.has("isSeed")) {
-                curi.setSeed(jo.getBoolean("isSeed"));
+                boolean isSeed = jo.getBoolean("isSeed");
+                logger.info("Setting isSeed=" + isSeed);
+                curi.setSeed(isSeed);
             }
 
             curi.getAnnotations().add(A_RECEIVED_FROM_AMQP);
