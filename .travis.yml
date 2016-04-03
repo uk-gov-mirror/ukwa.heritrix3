@@ -1,0 +1,16 @@
+language: java
+
+sudo: false
+
+jdk:
+  - oraclejdk7
+  - oraclejdk8
+
+before_install:  
+ - "echo $JAVA_OPTS"
+ - "export JAVA_OPTS=-Xmx512m"
+
+script:
+ - mvn clean install
+ - cd contrib && mvn clean install
+
