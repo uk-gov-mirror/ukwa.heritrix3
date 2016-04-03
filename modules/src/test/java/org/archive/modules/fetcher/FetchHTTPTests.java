@@ -81,7 +81,8 @@ import org.littleshoot.proxy.ProxyAuthorizationHandler;
  */
 public class FetchHTTPTests extends ProcessorTestBase {
     
-    // private static Logger logger = Logger.getLogger(FetchHTTPTests.class.getName());
+    private static Logger logger = Logger
+            .getLogger(FetchHTTPTests.class.getName());
 
     // static {
     //     Logger.getLogger("").setLevel(Level.FINE);
@@ -726,12 +727,13 @@ public class FetchHTTPTests extends ProcessorTestBase {
                         // logger.info("accepted connection from " + connectionSocket + ", shutting it down immediately");
                         connectionSocket.shutdownOutput();
                     } catch (SocketTimeoutException e) {
+                        logger.warning("caught SocketTimeoutException: " + e);
                     }
                 }
             } catch (Exception e) {
-                // logger.warning("caught exception: " + e);
+                logger.warning("caught Exception: " + e);
             } finally {
-                // logger.info("all done suckers");
+                logger.info("all done suckers");
                 if (listeningSocket != null) {
                     try {
                         listeningSocket.close();
