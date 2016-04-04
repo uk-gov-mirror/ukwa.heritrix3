@@ -7,9 +7,9 @@ jdk:
   - oraclejdk8
 
 before_install:  
- - "export JAVA_OPTS=-Xmx1g"
+ - "export JAVA_OPTS=-Xmx1500m"
  - "echo JAVA_OPTS $JAVA_OPTS"
- - "export MAVEN_OPTS=-Xmx1g"
+ - "export MAVEN_OPTS=-Xmx1500m"
  - "echo MAVEN_OPTS $MAVEN_OPTS"
 
 script:
