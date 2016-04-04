@@ -724,7 +724,7 @@ public class FetchHTTPTests extends ProcessorTestBase {
                 while (!isTimeToBeDone) {
                     try {
                         Socket connectionSocket = listeningSocket.accept();
-                        // logger.info("accepted connection from " + connectionSocket + ", shutting it down immediately");
+                        logger.info("accepted connection from " + connectionSocket + ", shutting it down immediately");
                         connectionSocket.shutdownOutput();
                     } catch (SocketTimeoutException e) {
                         logger.warning("caught SocketTimeoutException: " + e);
@@ -753,6 +753,9 @@ public class FetchHTTPTests extends ProcessorTestBase {
         logger.info("Starting server for testNoResponse...");
         NoResponseServer noResponseServer = new NoResponseServer("localhost", 7780);
         noResponseServer.start();
+        
+        // Give the server time to start up:
+        Thread.sleep(1000);
         
         // CrawlURI curi = makeCrawlURI("http://stats.bbc.co.uk/robots.txt");
         CrawlURI curi = makeCrawlURI("http://localhost:7780");
