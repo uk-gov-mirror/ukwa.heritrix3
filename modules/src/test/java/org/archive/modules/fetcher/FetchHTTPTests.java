@@ -750,6 +750,7 @@ public class FetchHTTPTests extends ProcessorTestBase {
 
     // Implicitly tests the retry cycle within httpcomponents
     public void testNoResponse() throws Exception {
+        logger.info("Starting server for testNoResponse...");
         NoResponseServer noResponseServer = new NoResponseServer("localhost", 7780);
         noResponseServer.start();
         
@@ -757,6 +758,7 @@ public class FetchHTTPTests extends ProcessorTestBase {
         CrawlURI curi = makeCrawlURI("http://localhost:7780");
         fetcher().process(curi);
         assertEquals(1, curi.getNonFatalFailures().size());
+        logger.info("testNoResponse non-fatal-failure is "+curi.getNonFatalFailures().toArray()[0]);
         assertTrue(curi.getNonFatalFailures().toArray()[0] instanceof NoHttpResponseException);
         assertEquals(FetchStatusCodes.S_CONNECT_FAILED, curi.getFetchStatus());
         assertEquals(0, curi.getFetchCompletedTime());
