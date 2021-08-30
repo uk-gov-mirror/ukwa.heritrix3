@@ -19,9 +19,11 @@
 package org.archive.bdb;
 
 import java.lang.ref.WeakReference;
+import java.util.logging.Logger;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.ObjectBuffer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 import com.sleepycat.bind.EntryBinding;
 import com.sleepycat.je.DatabaseEntry;
 
@@ -33,12 +35,21 @@ import com.sleepycat.je.DatabaseEntry;
  */
 public class KryoBinding<K> implements EntryBinding<K> {
 
+    private static final Logger logger = Logger.getLogger(KryoBinding.class.getName());
+    
     protected Class<K> baseClass;
-    protected AutoKryo kryo = new AutoKryo(); 
-    protected ThreadLocal<WeakReference<ObjectBuffer>> threadBuffer = new ThreadLocal<WeakReference<ObjectBuffer>>() {
+    
+    static private final ThreadLocal<AutoKryo> kryos = new ThreadLocal<AutoKryo>() {
+	   protected AutoKryo initialValue() {
+		   AutoKryo kryo = new AutoKryo();
+	      return kryo;
+	   };
+	};
+    	
+    protected ThreadLocal<WeakReference<Output>> threadBuffer = new ThreadLocal<WeakReference<Output>>() {
         @Override
-        protected WeakReference<ObjectBuffer> initialValue() {
-            return new WeakReference<ObjectBuffer>(new ObjectBuffer(kryo,16*1024,Integer.MAX_VALUE));
+        protected WeakReference<Output> initialValue() {
+        	return new WeakReference<Output>(new Output(16*1024, -1));
         }
     };
     
@@ -51,23 +62,25 @@ public class KryoBinding<K> implements EntryBinding<K> {
      */
     public KryoBinding(Class<K> baseClass) {
         this.baseClass = baseClass;
-        kryo.autoregister(baseClass);
-        // TODO: reevaluate if explicit registration should be required
-        kryo.setRegistrationOptional(true);
+        // Register heavily-used classes: 
+        kryos.get().register(baseClass);
+        // Auto-register classes (n.b. this does not work safely across threads - see org.archive.bdb.AutoKryo):
+        //kryos.get().autoregister(baseClass);
     }
 
     public Kryo getKryo() {
-        return kryo;
+        return kryos.get();
     }
     
-    private ObjectBuffer getBuffer() {
-        WeakReference<ObjectBuffer> ref = threadBuffer.get();
-        ObjectBuffer ob = ref.get();
+    private Output getBuffer() {
+        WeakReference<Output> ref = threadBuffer.get();
+        Output ob = ref.get();
         if (ob == null) {
-            ob = new ObjectBuffer(kryo,16*1024,Integer.MAX_VALUE);
-            threadBuffer.set(new WeakReference<ObjectBuffer>(ob));
+            ob = new Output(16*1024, -1);
+            threadBuffer.set(new WeakReference<Output>(ob));
         }
-        return ob;        
+        ob.clear();
+        return ob;
     }
     
     /**
@@ -76,11 +89,15 @@ public class KryoBinding<K> implements EntryBinding<K> {
      * @see com.sleepycat.bind.serial.SerialBinding#entryToObject
      */
     public void objectToEntry(K object, DatabaseEntry entry) {
-        entry.setData(getBuffer().writeObjectData(object));
+    	Output output = getBuffer();
+    	kryos.get().writeObject(output, object);
+        entry.setData(output.toBytes());
     }
 
-    @Override
+	@Override
     public K entryToObject(DatabaseEntry entry) {
-        return getBuffer().readObjectData(entry.getData(), baseClass);
+		Input input = new Input(entry.getData());
+		return (K) kryos.get().readObjectOrNull(input, baseClass);
     }
+	
 }

@@ -18,24 +18,20 @@
  */
 package org.archive.net;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.nio.ByteBuffer;
-
 import org.apache.commons.httpclient.URIException;
 import org.archive.url.UsableURI;
 
-import com.esotericsoftware.kryo.CustomSerialization;
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.serialize.StringSerializer;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 /**
  * Usable URI. The bulk of the functionality of this class has moved to
  * {@link UsableURI} in the archive-commons project. This class adds Kryo
  * serialization.
  */
-public class UURI extends UsableURI implements CustomSerialization {
+public class UURI extends UsableURI implements KryoSerializable {
 
     private static final long serialVersionUID = -8946640480772772310L;
 
@@ -48,31 +44,22 @@ public class UURI extends UsableURI implements CustomSerialization {
     }
     
     /* needed for kryo serialization */
-    protected UURI() {
+    public UURI() {
         super();
     }
 
-    @Override
-    public void writeObjectData(Kryo kryo, ByteBuffer buffer) {
-        StringSerializer.put(buffer, toCustomString());
-    }
+	@Override
+	public void write(Kryo kryo, Output output) {
+		output.writeString(toCustomString());
+	}
 
-    @Override
-    public void readObjectData(Kryo kryo, ByteBuffer buffer) {
+	@Override
+	public void read(Kryo kryo, Input input) {
         try {
-            parseUriReference(StringSerializer.get(buffer), true);
-        } catch (URIException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-    }
-
-    private void writeObject(ObjectOutputStream stream) throws IOException {
-        stream.writeUTF(toCustomString());
-    }
-
-    private void readObject(ObjectInputStream stream) throws IOException,
-            ClassNotFoundException {
-        parseUriReference(stream.readUTF(), true);
-    }
+			parseUriReference(input.readString(), true);
+		} catch (URIException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 }

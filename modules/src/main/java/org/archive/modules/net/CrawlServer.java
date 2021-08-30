@@ -21,7 +21,6 @@ package org.archive.modules.net;
 import static org.archive.modules.CrawlURI.FetchType.HTTP_GET;
 import static org.archive.modules.fetcher.FetchStatusCodes.S_DEEMED_NOT_FOUND;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -320,7 +319,7 @@ public class CrawlServer implements Serializable, FetchStats.HasFetchStats, Iden
         kryo.register(CrawlServer.class);
         kryo.autoregister(FetchStats.class); 
         kryo.autoregister(Robotstxt.class);
-        kryo.setRegistrationOptional(true); 
+        //kryo.setRegistrationOptional(true); 
     }
     
     //

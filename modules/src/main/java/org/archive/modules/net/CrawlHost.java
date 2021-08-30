@@ -21,11 +21,8 @@ package org.archive.modules.net;
 
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.URLEncoder;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -34,8 +31,6 @@ import org.archive.modules.fetcher.FetchStats;
 import org.archive.util.IdentityCacheable;
 import org.archive.util.InetAddressUtil;
 import org.archive.util.ObjectIdentityCache;
-
-import com.esotericsoftware.kryo.Serializer;
 
 /** 
  * Represents a single remote "host".
@@ -245,6 +240,7 @@ public class CrawlHost implements Serializable, FetchStats.HasFetchStats, Identi
          * holds hostname, but heritrix doesn't use that; and retrieving it can
          * result in dns lookup, so we don't serialize it.
          */
+        /*
         kryo.register(Inet4Address.class, new Serializer() {
             @Override
             public void writeObjectData(ByteBuffer buffer, Object object) {
@@ -265,6 +261,7 @@ public class CrawlHost implements Serializable, FetchStats.HasFetchStats, Identi
         });
         kryo.autoregister(byte[].class);
         kryo.setRegistrationOptional(true);
+        */
     }
     
     //

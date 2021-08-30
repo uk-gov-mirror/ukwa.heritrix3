@@ -22,12 +22,13 @@ package org.archive.modules.net;
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.net.InetAddress;
-import java.nio.ByteBuffer;
-
 import junit.framework.TestCase;
 
 import org.archive.bdb.AutoKryo;
 import org.archive.util.TestUtils;
+
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 public class CrawlHostTest extends TestCase {
 
@@ -56,11 +57,10 @@ public class CrawlHostTest extends TestCase {
         CrawlHost crawlHost0 = new CrawlHost(localhost.getHostName());
         crawlHost0.setIP(localhost, 431243);
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
+        Output buffer = new Output(1024, -1);
         kryo.writeObject(buffer, crawlHost0);
-        buffer.flip();
         
-        CrawlHost crawlHost1 = kryo.readObject(buffer, CrawlHost.class);
+        CrawlHost crawlHost1 = kryo.readObject(new Input(buffer.getBuffer()), CrawlHost.class);
 
         TestCase.assertEquals(crawlHost0.getClass(), crawlHost1.getClass());
         TestCase.assertEquals(crawlHost0, crawlHost1);

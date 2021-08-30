@@ -1,15 +1,18 @@
 package org.archive.bdb;
 
+import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.objenesis.strategy.StdInstantiatorStrategy;
 
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.SerializationException;
-
-import sun.reflect.ReflectionFactory;
+import com.esotericsoftware.kryo.Serializer;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
 
 /**
  * Extensions to Kryo to let classes control their own registration, suggest
@@ -20,20 +23,74 @@ import sun.reflect.ReflectionFactory;
  * KryoReflectionFactorySupport class of Martin Grotzke's kryo-serializers 
  * project. <a href="https://github.com/magro/kryo-serializers">https://github.com/magro/kryo-serializers</a>
  * 
+ * 
+ * org.archive.crawler.selftest.StatisticsSelfTest
  * TODO: more comments!
  * 
  * @author gojomo
  */
-@SuppressWarnings("unchecked")
 public class AutoKryo extends Kryo {
     protected ArrayList<Class<?>> registeredClasses = new ArrayList<Class<?>>(); 
     
-    @Override
-    protected void handleUnregisteredClass(@SuppressWarnings("rawtypes") Class type) {
-        System.err.println("UNREGISTERED FOR KRYO "+type+" in "+registeredClasses.get(0));
-        super.handleUnregisteredClass(type);
-    }
+    public AutoKryo() {
+    	// Some classes don't have suitable constructors, so we need additional tricks to create them:
+    	DefaultInstantiatorStrategy is = new Kryo.DefaultInstantiatorStrategy();
+    	is.setFallbackInstantiatorStrategy(new StdInstantiatorStrategy());
+    	this.setInstantiatorStrategy(is);
 
+    	// Doing this allows classes to be registered as we come across them (see note below on limitations):
+        this.setRegistrationRequired(false);
+        // n.b. There is no point setting this in autoregister hooks as it's a global setting.
+        
+    	// Heritrix's structure means we can't know all required classes at this point, but we 
+        // can handle platform classes here.
+        
+        /*
+         * Custom serializer because default serialization doesn't work. Any
+         * non-null IP address comes back as 0.0.0.0. XXX Inet4Address also
+         * holds hostname, but heritrix doesn't use that; and retrieving it can
+         * result in dns lookup, so we don't serialize it.
+         * 
+         * This was originally autoregisted in org.archive.modules.net.CrawlHost.autoregister().
+         */
+        this.register(Inet4Address.class, new Serializer<Inet4Address>() {
+
+			@Override
+			public void write(Kryo kryo, Output output, Inet4Address object) {
+				byte[] address = object.getAddress();
+				output.writeInt(address.length);
+                output.write(address);
+			}
+
+			@Override
+			public Inet4Address read(Kryo kryo, Input input, Class<Inet4Address> type) {
+                try {
+                	int length = input.readInt();
+                	byte[] address = input.readBytes(length);
+                    return (Inet4Address) InetAddress.getByAddress(address);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+			}
+
+        });
+        
+    }
+    
+	// Auto-registration functioning as expected requires the order of registration to be the same on every run.
+    // As some classes are still picked up and runtime, this leads to errors like:
+    // 
+    //     com.esotericsoftware.kryo.KryoException: Encountered unregistered class ID: 14
+    //
+    // Therefore, the initial use of this class is commented out in org.archive.bdb.KryoBinding
+    //
+    // The auto-registration system also allows different classes to register the same sub-class, but potentially 
+    // with different configuration.  This may lead to confusing behaviour.
+    //
+    // To make it work, it would be necessary to force registration to be required, and then go through and 
+    // make sure every used class is declared in the relevant autoregister function. Furthermore, The order of
+    // registration has to be maintained to ensure compatability over time.
+    //
     public void autoregister(Class<?> type) {
         if (registeredClasses.contains(type)) {
             return;
@@ -50,16 +107,21 @@ public class AutoKryo extends Kryo {
         }
     }
 
-    protected static final ReflectionFactory REFLECTION_FACTORY = ReflectionFactory.getReflectionFactory();
+    //protected static final ReflectionFactory REFLECTION_FACTORY = ReflectionFactory.getReflectionFactory();
     protected static final Object[] INITARGS = new Object[0];
     protected static final Map<Class<?>, Constructor<?>> CONSTRUCTOR_CACHE = new ConcurrentHashMap<Class<?>, Constructor<?>>();
-    
+
+    protected Object invokeStatic(String method, Class<?> clazz, Class<?>[] types, Object[] args) throws Exception {
+        return clazz.getMethod(method, types).invoke(null, args);
+    }
+
+    /*
     @Override
     public <T> T newInstance(Class<T> type) {
-        SerializationException ex = null; 
+        com.esotericsoftware.kryo.KryoException ex = null;
         try {
             return super.newInstance(type);
-        } catch (SerializationException se) {
+        } catch (com.esotericsoftware.kryo.KryoException se) {
             ex = se;
         }
         try {
@@ -81,14 +143,11 @@ public class AutoKryo extends Kryo {
         } catch (InstantiationException e) {
             e.printStackTrace();
         } catch (IllegalAccessException e) {
-            e.printStackTrace();
+           e.printStackTrace();
         } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        }
+			e.printStackTrace();
+		}
         throw ex;
     }
-
-    protected Object invokeStatic(String method, Class<?> clazz, Class<?>[] types, Object[] args) throws Exception {
-        return clazz.getMethod(method, types).invoke(null, args);
-    }
+    */
 }

@@ -178,6 +178,6 @@ implements Serializable {
         kryo.autoregister(HashSet.class);
         kryo.autoregister(SimplePrecedenceProvider.class);
         kryo.autoregister(byte[].class);
-        kryo.setRegistrationOptional(true); 
+        //kryo.setRegistrationOptional(true); 
     }
 }

@@ -32,7 +32,7 @@ public class IdentityCacheableWrapper<K> implements IdentityCacheable {
     protected K wrapped; 
     
     // For Kryo serialization
-    IdentityCacheableWrapper() { }
+    public IdentityCacheableWrapper() { }
 
     public IdentityCacheableWrapper(String key, K wrapped) {
         super();
@@ -69,6 +69,6 @@ public class IdentityCacheableWrapper<K> implements IdentityCacheable {
     //
     public static void autoregisterTo(AutoKryo kryo) {
         kryo.register(IdentityCacheableWrapper.class);
-        kryo.setRegistrationOptional(true); 
+        //kryo.setRegistrationOptional(true); 
     }
 }
