@@ -77,6 +77,10 @@ public class AutoKryo extends Kryo {
         
     }
     
+    // From version 2 onwards, it is no longer safe to use a single Kryo instance. 
+    // See https://github.com/EsotericSoftware/kryo#thread-safety
+    // This has significant consequences for Heritrix3, and how class registration is used.
+    //
 	// Auto-registration functioning as expected requires the order of registration to be the same on every run.
     // As some classes are still picked up and runtime, this leads to errors like:
     // 
